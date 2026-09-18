@@ -1,0 +1,10 @@
+package com.tarpa.tourism.permit.model;
+
+public enum PermitType {
+    TIMS_CARD,
+    SAGARMATHA_NATIONAL_PARK,
+    ANNAPURNA_CONSERVATION_AREA,
+    MANASLU_RESTRICTED_PERMIT,
+    UPPER_MUSTANG_SPECIAL,
+    NMA_CLIMBING_PERMIT
+}
