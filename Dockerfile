@@ -1,22 +1,28 @@
-# Stage 1: Build the JAR with Maven and Java 25
-FROM maven:3.9.9-eclipse-temurin-25-alpine AS build
+# Stage 1: Build using official Eclipse Temurin 25
+FROM eclipse-temurin:25-jdk AS build
 WORKDIR /app
 
-# Copy pom.xml and download dependencies
+# Copy maven wrapper and pom.xml
 COPY pom.xml .
-RUN mvn dependency:go-offline -B
+COPY .mvn .mvn
+COPY mvnw .
+
+# Ensure mvnw has execute permissions
+RUN chmod +x mvnw
+
+# Download dependencies
+RUN ./mvnw dependency:go-offline -B
 
 # Copy source code and package
 COPY src ./src
-RUN mvn clean package -DskipTests
+RUN ./mvnw clean package -DskipTests
 
-# Stage 2: Minimal runtime image
-FROM eclipse-temurin:25-jre-alpine
+# Stage 2: Production JRE runtime
+FROM eclipse-temurin:25-jre
 WORKDIR /app
 
 COPY --from=build /app/target/*.jar app.jar
 
-# Render assigns dynamic port via $PORT
 ENV PORT=8080
 EXPOSE 8080
 
