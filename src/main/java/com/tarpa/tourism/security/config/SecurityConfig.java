@@ -24,6 +24,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.util.Arrays;
 import java.util.List;
 
 @Configuration
@@ -50,8 +51,9 @@ public class SecurityConfig {
                 )
 
                 .authorizeHttpRequests(auth -> auth
-                        // 1. PUBLIC ROUTES (Login, public content)
+                        // 1. PUBLIC ROUTES (Login, public content, deployment health check)
                         .requestMatchers(
+                                "/api/health",
                                 "/api/auth/**",
                                 "/api/feedbacks/testimonials",
                                 "/api/bookings/*/invoice",
@@ -63,7 +65,6 @@ public class SecurityConfig {
 
                         // Documents & Permits
                         .requestMatchers("/api/documents/**").hasAnyRole("SUPER_ADMIN", "OPERATIONS_MANAGER", "PERMITS_DOCUMENTATION_OFFICER")
-
 
                         // EXECUTIVE & PERMITS
                         .requestMatchers("/api/financials/**").hasAnyRole("SUPER_ADMIN", "MANAGING_DIRECTOR")
@@ -81,7 +82,23 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost:5173"));
+
+        // Check if FRONTEND_URL environment variable is provided (e.g., in production deployment)
+        String allowedOriginsEnv = System.getenv("FRONTEND_URL");
+        if (allowedOriginsEnv != null && !allowedOriginsEnv.isBlank()) {
+            List<String> origins = Arrays.stream(allowedOriginsEnv.split(","))
+                    .map(String::trim)
+                    .toList();
+            configuration.setAllowedOrigins(origins);
+        } else {
+            // Local development and preview fallbacks
+            configuration.setAllowedOrigins(List.of(
+                    "http://localhost:5173",
+                    "http://localhost:3000",
+                    "http://localhost:4173"
+            ));
+        }
+
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept", "X-Requested-With"));
         configuration.setExposedHeaders(List.of("Authorization"));
