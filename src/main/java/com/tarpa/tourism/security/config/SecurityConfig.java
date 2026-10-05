@@ -41,35 +41,36 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
+                // Apply CORS configuration first
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                // Exception Handlers
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint(authenticationEntryPoint)
                         .accessDeniedHandler(accessDeniedHandler)
                 )
-
                 .authorizeHttpRequests(auth -> auth
-                        // 1. CRITICAL: Allow all OPTIONS preflight requests across all endpoints
+                        // 1. Preflight requests permitted unconditionally
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                        // 2. PUBLIC ROUTES (Login, registration, health check, public content)
+                        // 2. Public endpoints (permitted both with and without /api)
                         .requestMatchers(
                                 "/api/health",
+                                "/health",
                                 "/api/auth/**",
+                                "/auth/**",
                                 "/api/feedbacks/testimonials",
                                 "/api/bookings/*/invoice",
                                 "/api/documents/download/**"
                         ).permitAll()
 
-                        // 3. ROLE-RESTRICTED ENDPOINTS
+                        // 3. Role-restricted endpoints
                         .requestMatchers("/api/logistics/**").hasAnyRole("SUPER_ADMIN", "OPERATIONS_MANAGER")
                         .requestMatchers("/api/documents/**").hasAnyRole("SUPER_ADMIN", "OPERATIONS_MANAGER", "PERMITS_DOCUMENTATION_OFFICER")
                         .requestMatchers("/api/financials/**").hasAnyRole("SUPER_ADMIN", "MANAGING_DIRECTOR")
                         .requestMatchers("/api/permits/**").hasAnyRole("SUPER_ADMIN", "OPERATIONS_MANAGER", "PERMITS_DOCUMENTATION_OFFICER")
 
-                        // 4. CATCH-ALL
+                        // 4. Everything else requires authentication
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider())
@@ -82,6 +83,16 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
 
+        // Whitelist frontend origins explicitly
+        configuration.setAllowedOriginPatterns(List.of(
+                "https://satori-woad.vercel.app",
+                "https://*.vercel.app",
+                "http://localhost:5173",
+                "http://localhost:3000",
+                "http://localhost:4173"
+        ));
+
+        // Read FRONTEND_URL if provided on Render
         String allowedOriginsEnv = System.getenv("FRONTEND_URL");
         if (allowedOriginsEnv != null && !allowedOriginsEnv.isBlank()) {
             if ("*".equals(allowedOriginsEnv.trim())) {
@@ -92,14 +103,6 @@ public class SecurityConfig {
                         .toList();
                 configuration.setAllowedOriginPatterns(origins);
             }
-        } else {
-            // Local development and preview fallbacks
-            configuration.setAllowedOriginPatterns(List.of(
-                    "http://localhost:5173",
-                    "http://localhost:3000",
-                    "http://localhost:4173",
-                    "https://*.vercel.app"
-            ));
         }
 
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
