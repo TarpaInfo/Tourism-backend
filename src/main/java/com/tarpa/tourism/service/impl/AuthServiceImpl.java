@@ -12,13 +12,18 @@ import com.tarpa.tourism.security.jwt.JwtService;
 import com.tarpa.tourism.service.AuthService;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
+import java.util.Collections;
+
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
@@ -31,13 +36,17 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public ApiResponse register(RegisterRequest request) {
-
         if (userRepository.existsByEmail(request.getEmail())) {
             return new ApiResponse(false, "Email already exists.");
         }
 
         Role role = roleRepository.findByRoleName("CUSTOMER")
-                .orElseThrow(() -> new RuntimeException("Role not found"));
+                .orElseGet(() -> roleRepository.save(
+                        Role.builder()
+                                .roleName("CUSTOMER")
+                                .description("Standard Customer")
+                                .build()
+                ));
 
         User user = User.builder()
                 .firstName(request.getFirstName())
@@ -50,29 +59,36 @@ public class AuthServiceImpl implements AuthService {
                 .build();
 
         userRepository.save(user);
-
         return new ApiResponse(true, "User registered successfully.");
     }
 
     @Override
     public LoginResponse login(LoginRequest request) {
-
+        // 1. Authenticate user credentials
         authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
                         request.getEmail(),
                         request.getPassword()));
 
+        // 2. Fetch User entity
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        UserDetails userDetails =
-                org.springframework.security.core.userdetails.User
-                        .builder()
-                        .username(user.getEmail())
-                        .password(user.getPassword())
-                        .roles(user.getRole().getRoleName())
-                        .build();
+        // 3. Format role name safely
+        String rawRoleName = (user.getRole() != null && user.getRole().getRoleName() != null)
+                ? user.getRole().getRoleName()
+                : "CUSTOMER";
 
+        String roleWithPrefix = rawRoleName.startsWith("ROLE_") ? rawRoleName : "ROLE_" + rawRoleName;
+
+        // 4. Build UserDetails using authorities (avoids Spring's illegal argument on .roles())
+        UserDetails userDetails = new org.springframework.security.core.userdetails.User(
+                user.getEmail(),
+                user.getPassword(),
+                Collections.singletonList(new SimpleGrantedAuthority(roleWithPrefix))
+        );
+
+        // 5. Generate token
         String token = jwtService.generateToken(userDetails);
 
         return new LoginResponse(
@@ -80,10 +96,9 @@ public class AuthServiceImpl implements AuthService {
                 user.getFirstName(),
                 user.getLastName(),
                 user.getEmail(),
-                user.getRole().getRoleName(),
+                rawRoleName,
                 token,
                 "Login successful."
         );
     }
-
 }
